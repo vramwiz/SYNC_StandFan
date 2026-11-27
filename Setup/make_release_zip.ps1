@@ -3,11 +3,11 @@
     [string]$XxhsumPath
 )
 
-# SYNC_AquaFX/setupを継承。既存のWeatherFX本番AUF2を梱包し、末尾バージョンのハッシュを更新する。
-# ビルド・ホスト起動・ネットワークへの公開は行わない。
+# 指定された本番 AUF2 を README・画像・ライセンスとともに梱包する。
+# カタログを更新し、ZIP の置換に失敗した場合は直前のカタログへ戻す。
 # Copyright (c) 2026 VRAMの魔術師 / SPDX-License-Identifier: GPL-3.0-only
 $ErrorActionPreference = 'Stop'
-$packageName = 'SYNC_WeatherFX'
+$packageName = 'SYNC_StandFan'
 $projectDir = Split-Path -Parent $PSScriptRoot
 if (-not $ReleaseDirectory) { $ReleaseDirectory = Join-Path $env:ProgramData "aviutl2\Plugin\$packageName" }
 $pluginName = "$packageName.auf2"
@@ -20,7 +20,7 @@ if (-not $XxhsumPath) {
     $XxhsumPath = Join-Path $projectDir 'Win64\Dependencies\xxHash-0.8.4\xxhsum.exe'
     if (-not (Test-Path -LiteralPath $XxhsumPath -PathType Leaf)) {
         $xxhsum = Get-Command xxhsum.exe -CommandType Application -ErrorAction SilentlyContinue
-        if (-not $xxhsum) { throw 'xxhsum.exe is required. See setup\README.md.' }
+        if (-not $xxhsum) { throw 'xxhsum.exe is required. See Setup\README.md.' }
         $XxhsumPath = $xxhsum.Source
     }
 }
@@ -32,12 +32,10 @@ $tempBase = Join-Path $PSScriptRoot ('.release-' + [guid]::NewGuid().ToString('N
 $tempPlugin = "$tempBase-plugin.tmp"
 $tempZip = "$tempBase-zip.tmp"
 $tempCatalog = "$tempBase-catalog.tmp"
-$tempNotices = "$tempBase-notices.tmp"
-$tempReadme = "$tempBase-readme.tmp"
 $catalogBackup = "$tempBase-previous-catalog.tmp"
 
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-$lock = [Threading.Mutex]::new($false, 'Local\VRAMWIZ.SYNC_WeatherFX.ReleaseZip')
+$lock = [Threading.Mutex]::new($false, 'Local\VRAMWIZ.SYNC_StandFan.ReleaseZip')
 $ownsLock = $false
 try {
     try { $ownsLock = $lock.WaitOne(0) }
@@ -64,7 +62,7 @@ try {
     }
     if (@($entry.version).Count -eq 0) { throw 'The catalog must contain a release version.' }
     if ($entry.version[0].version -cne 'v1.0.0') {
-        throw 'The first public WeatherFX version must be v1.0.0.'
+        throw 'The first public StandFan version must be v1.0.0.'
     }
     $version = $catalog[0].version[-1]
     $releaseDate = [datetime]::MinValue
@@ -92,31 +90,22 @@ try {
     }
     $hash = $Matches[1].ToLowerInvariant()
 
+    # 配布物を専用フォルダーへまとめ、同じフォルダーをアンインストールの対象にする。
+    $uninstall = @($entry.installer.uninstall)
+    if ($uninstall.Count -ne 1 -or $uninstall[0].action -cne 'delete' -or
+        $uninstall[0].path -cne "{pluginsDir}/$packageName") {
+        throw 'The catalog uninstall action must delete only the plugin folder.'
+    }
     $packageFiles = [ordered]@{
         $pluginName = $tempPlugin
-        'README.md' = $tempReadme
+        'README.md' = Join-Path $projectDir 'README.md'
+        'Sample/standfan-presets.png' = Join-Path $projectDir 'Sample\standfan-presets.png'
         'LICENSE' = Join-Path $projectDir 'LICENSE'
-        'THIRD_PARTY_NOTICES.md' = $tempNotices
+        'THIRD_PARTY_NOTICES.md' = Join-Path $projectDir 'THIRD_PARTY_NOTICES.md'
         'ThirdParty/LICENSE.AviUtl2-SDK.txt' = Join-Path $projectDir 'ThirdParty\LICENSE.AviUtl2-SDK.txt'
     }
-    # 開発用と配布用で同じライセンス配置を使用する。
-    $notices = [IO.File]::ReadAllText((Join-Path $projectDir 'THIRD_PARTY_NOTICES.md'))
-    [IO.File]::WriteAllText($tempNotices, $notices, [Text.UTF8Encoding]::new($false))
-    # ルートREADMEを配布用にも使用する。画像はソース公開先を参照し、ZIP内の不足リンクを避ける。
-    $readme = [IO.File]::ReadAllText((Join-Path $projectDir 'README.md'))
-    $readme = $readme.Replace('](Sample/', "](https://raw.githubusercontent.com/vramwiz/$packageName/main/Sample/")
-    [IO.File]::WriteAllText($tempReadme, $readme, [Text.UTF8Encoding]::new($false))
     foreach ($file in $packageFiles.Values) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Package file not found: $file" }
-    }
-    # インストールした全ファイルをアンインストールでき、他の場所を消さないことを確認する。
-    $expectedPaths = @($packageFiles.Keys | ForEach-Object { "{pluginsDir}/$packageName/$_" })
-    $deleteEntries = @($entry.installer.uninstall)
-    $deletePaths = @($deleteEntries | Where-Object action -ceq 'delete' | ForEach-Object path)
-    if ($deleteEntries.Count -ne $expectedPaths.Count -or $deletePaths.Count -ne $expectedPaths.Count -or
-        @($deletePaths | Select-Object -Unique).Count -ne $expectedPaths.Count -or
-        @(Compare-Object $expectedPaths $deletePaths -CaseSensitive).Count -ne 0) {
-        throw 'The catalog uninstall paths must list every packaged file exactly once.'
     }
     $zip = [IO.Compression.ZipFile]::Open($tempZip, [IO.Compression.ZipArchiveMode]::Create)
     try {
@@ -152,7 +141,7 @@ try {
 finally {
     if ($ownsLock) { $lock.ReleaseMutex() }
     $lock.Dispose()
-    foreach ($tempPath in @($tempPlugin, $tempZip, $tempCatalog, $tempNotices, $tempReadme)) {
+    foreach ($tempPath in @($tempPlugin, $tempZip, $tempCatalog)) {
         [IO.File]::Delete($tempPath)
     }
 }

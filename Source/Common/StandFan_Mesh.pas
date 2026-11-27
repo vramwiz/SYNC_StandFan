@@ -7,6 +7,9 @@ unit StandFan_Mesh;
 
 interface
 
+uses
+  StandFan_Settings;
+
 type
   TVec3 = record
     X, Y, Z: Single;
@@ -14,15 +17,16 @@ type
 
   TFanVertex = record
     Position, Normal: TVec3;
+    Opacity: Single;
   end;
 
   TFanTriangle = record
     Vertices: array[0..2] of TFanVertex;
     Color: Cardinal;  // $RRGGBB
+    Material: TFanMaterial;
   end;
 
   TFanPart = record
-    Pivot: TVec3;
     Triangles: TArray<TFanTriangle>;
   end;
 
@@ -38,16 +42,18 @@ type
     FTriangles: TArray<TFanTriangle>;
     FCount: Integer;
   public
-    Origin: TVec3;
+    Origin: TVec3;  // 追加する頂点に適用する部品内の平行移動。
+    Material: TFanMaterial;
     // 法線に合わせて頂点順を揃える。断面中心の縮退面は省く。
     procedure Triangle(Color: Cardinal; const A, B, C: TFanVertex);
     procedure Quad(Color: Cardinal; const A, B, C, D: TFanVertex);
     procedure FlatQuad(Color: Cardinal; const A, B, C, D: TVec3);
-    // 中心からの半径と軸方向位置で定義した断面を回転させる。
+    // 半径と軸方向位置で定義した断面を回転させ、指定軸の面を追加する。
+    // Smooth では断面間の法線を補間。角を残す部品には既定の面法線を使う。
     procedure Lathe(const Center: TVec3; Axis: TLatheAxis; Segments: Integer;
-      const Profile: array of TProfilePoint);
-    // メッシュの所有権を渡し、ビルダーを空にする。
-    function Finish(const Pivot: TVec3): TFanPart;
+      const Profile: array of TProfilePoint; Smooth: Boolean = False);
+    // 完成メッシュの所有権を返し、頂点・原点・材質を次の部品に備えて初期化する。
+    function Finish: TFanPart;
   end;
 
 function Vec(X, Y, Z: Single): TVec3;
@@ -56,8 +62,9 @@ function Subtract(const A, B: TVec3): TVec3;
 function Scale(const A: TVec3; Factor: Single): TVec3;
 function Dot(const A, B: TVec3): Single;
 function Cross(const A, B: TVec3): TVec3;
+// 法線を単位長に揃える。縮退した入力はゼロベクトルのまま返す。
 function Normalize(const A: TVec3): TVec3;
-function Vertex(const Position, Normal: TVec3): TFanVertex;
+function Vertex(const Position, Normal: TVec3; Opacity: Single = 1): TFanVertex;
 function ProfilePoint(Radius, Depth: Single; Color: Cardinal): TProfilePoint;
 
 implementation
@@ -108,10 +115,11 @@ begin
     Result := A;
 end;
 
-function Vertex(const Position, Normal: TVec3): TFanVertex;
+function Vertex(const Position, Normal: TVec3; Opacity: Single): TFanVertex;
 begin
   Result.Position := Position;
   Result.Normal := Normal;
+  Result.Opacity := Opacity;
 end;
 
 function ProfilePoint(Radius, Depth: Single; Color: Cardinal): TProfilePoint;
@@ -132,6 +140,7 @@ begin
     SetLength(FTriangles, Max(256, FCount * 2));
   Face := @FTriangles[FCount];
   Face^.Color := Color;
+  Face^.Material := Material;
   Face^.Vertices[0] := A;
   if Dot(FaceNormal, Add(Add(A.Normal, B.Normal), C.Normal)) > 0 then
   begin
@@ -165,11 +174,17 @@ begin
 end;
 
 procedure TFanMeshBuilder.Lathe(const Center: TVec3; Axis: TLatheAxis;
-  Segments: Integer; const Profile: array of TProfilePoint);
+  Segments: Integer; const Profile: array of TProfilePoint; Smooth: Boolean);
 var
-  Circle: TArray<TVec3>;
+  Circle, ProfileNormals: TArray<TVec3>;
   I, J, Next: Integer;
   Radial, Along: Single;
+
+  function SectionNormal(First, Last: Integer): TVec3;
+  begin
+    Result := Normalize(Vec(Profile[Last].Depth-Profile[First].Depth,0,
+      Profile[First].Radius-Profile[Last].Radius));
+  end;
 
   function RingVertex(Ring, Angle: Integer): TFanVertex;
   var
@@ -179,6 +194,11 @@ var
     N := Scale(Circle[Angle], Radial);
     P.Z := Profile[Ring].Depth;
     N.Z := Along;
+    if Smooth then
+    begin
+      N := Scale(Circle[Angle],ProfileNormals[Ring].X);
+      N.Z := ProfileNormals[Ring].Z;
+    end;
     if Axis = axisY then
     begin
       P := Vec(P.X, P.Z, P.Y);
@@ -191,6 +211,14 @@ begin
   SetLength(Circle, Segments);
   for J := 0 to Segments - 1 do
     Circle[J] := Vec(Cos(2*Pi*J/Segments), Sin(2*Pi*J/Segments), 0);
+  if Smooth then
+  begin
+    // 各断面の前後の面法線を平均し、曲面の帯状の陰影をなくす。
+    SetLength(ProfileNormals,Length(Profile));
+    for I := 0 to High(Profile) do
+      ProfileNormals[I] := Add(SectionNormal(Max(0,I-1),I),
+        SectionNormal(I,Min(I+1,High(Profile))));
+  end;
   for I := 0 to High(Profile) - 1 do
   begin
     Radial := Profile[I+1].Depth - Profile[I].Depth;
@@ -204,14 +232,14 @@ begin
   end;
 end;
 
-function TFanMeshBuilder.Finish(const Pivot: TVec3): TFanPart;
+function TFanMeshBuilder.Finish: TFanPart;
 begin
   SetLength(FTriangles, FCount);
-  Result.Pivot := Pivot;
   Result.Triangles := FTriangles;
   FTriangles := nil;
   FCount := 0;
   Origin := Vec(0, 0, 0);
+  Material := fmFixed;
 end;
 
 end.

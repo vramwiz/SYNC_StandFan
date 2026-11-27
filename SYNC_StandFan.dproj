@@ -91,9 +91,12 @@
         </DelphiCompile>
         <DCCReference Include="Source\Lib\AviUtl2FilterTypes.pas"/>
         <DCCReference Include="Source\Lib\FilterTable\PluginFilterTable.pas"/>
+        <DCCReference Include="Source\Common\StandFan_Settings.pas"/>
+        <DCCReference Include="Source\Common\StandFan_Motion.pas"/>
         <DCCReference Include="Source\Common\StandFan_Mesh.pas"/>
         <DCCReference Include="Source\Common\StandFan_Model.pas"/>
         <DCCReference Include="Source\Common\StandFan_Renderer.pas"/>
+        <DCCReference Include="Source\Plugin\Filter\StandFan_Parameters.pas"/>
         <DCCReference Include="Source\Plugin\Filter\SYNC_StandFan_FilterPlugin.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

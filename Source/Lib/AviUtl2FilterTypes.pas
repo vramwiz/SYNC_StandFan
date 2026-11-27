@@ -74,11 +74,16 @@ type
     SetGridBpm: Pointer;
     GetObjectName: Pointer;
     SetObjectName: TSetObjectNameFunc;
-    // SDK v2115: get_layer_name ～ set_section_hidden.
-    BeforeGetObjectSectionFrame: array[27..39] of Pointer;
+    // SDK: get_layer_name ～ set_layer_lock.
+    BeforeGetObjectSectionNum: array[27..37] of Pointer;
+    GetObjectSectionNum: function(Obj: OBJECT_HANDLE): Integer; cdecl;
+    GetFocusObjectSection: Pointer;
     GetObjectSectionFrame: function(Obj: OBJECT_HANDLE; Section: Integer): Integer; cdecl;
-    // get_object_track_value ～ get_effect_check_value.
-    BeforeGetEffectTrackInfo: array[41..60] of Pointer;
+    // get_object_track_value ～ set_effect_item_value.
+    BeforeGetEffectTrackValue: array[41..58] of Pointer;
+    GetEffectTrackValue: function(Effect: Pointer; Item: LPCWSTR;
+      Frame: Double; Value: PDouble): Boolean; cdecl;
+    GetEffectCheckValue: Pointer;
     GetEffectTrackInfo: function(Effect: Pointer; Item: LPCWSTR;
       Info: PTrackInfo; InfoSize: Integer): Boolean; cdecl;
   end;

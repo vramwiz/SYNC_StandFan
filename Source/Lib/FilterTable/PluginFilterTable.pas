@@ -35,6 +35,8 @@ procedure AddSelect(var Item: TFILTER_ITEM_SELECT; Name: PWideChar;
   Value: Integer; List: Pointer);
 procedure AddGroup(var Item: TFILTER_ITEM_GROUP; Name: PWideChar;
   DefaultVisible: Byte);
+procedure AddHideRule(var Item: TFILTER_ITEM_HIDE_RULE; Name, ConditionName: PWideChar;
+  ConditionOperator, ConditionValue: Integer);
 procedure AddAlwaysHideRule(var Item: TFILTER_ITEM_HIDE_RULE; Name: PWideChar);
 
 // 別ユニットで初期化済みの項目も同じ登録順へ組み込めるようにする。
@@ -178,12 +180,20 @@ begin
   RegisterItem(@Item);
 end;
 
-procedure AddAlwaysHideRule(var Item: TFILTER_ITEM_HIDE_RULE; Name: PWideChar);
+procedure AddHideRule(var Item: TFILTER_ITEM_HIDE_RULE; Name, ConditionName: PWideChar;
+  ConditionOperator, ConditionValue: Integer);
 begin
-  Item := Default(TFILTER_ITEM_HIDE_RULE);
   Item.ItemType := 'hiderule';
   Item.Name := Name;
+  Item.ConditionName := ConditionName;
+  Item.ConditionOperator := ConditionOperator;
+  Item.ConditionValue := ConditionValue;
   RegisterItem(@Item);
+end;
+
+procedure AddAlwaysHideRule(var Item: TFILTER_ITEM_HIDE_RULE; Name: PWideChar);
+begin
+  AddHideRule(Item,Name,nil,0,0);
 end;
 
 procedure AddFilterItem(var Item: TFILTER_ITEM_TRACK);
